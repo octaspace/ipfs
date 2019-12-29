@@ -1,0 +1,5 @@
+{application, ipfs, [
+    {description, "IPFS Client API"},
+    {vsn, semver},
+    {applications, [kernel, stdlib, jsx, gun]}
+]}.
