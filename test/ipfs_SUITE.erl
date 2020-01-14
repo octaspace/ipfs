@@ -4,7 +4,8 @@
 -export([init_per_suite/1]).
 -export([end_per_suite/1]).
 
--export([add/1]).
+-export([add_file/1]).
+-export([add_data/1]).
 -export([ls/1]).
 -export([cat/1]).
 
@@ -13,8 +14,9 @@
 -define(DATA_1MiB_MD5, <<182,216,27,54,10,86,114,216,12,39,67,15,57,21,62,44>>).
 -define(DATA_100MiB_MD5, <<47,40,43,132,231,230,8,213,133,36,73,237,148,11,252,81>>).
 -define(DATA_1MiB_HASH, <<"QmVkbauSDEaMP4Tkq6Epm9uW75mWm136n81YH8fGtfwdHU">>).
+-define(DATA_100MiB_HASH, <<"Qmca3PNFKuZnYkiVv1FpcV1AfDUm4qCSHoYjPTBqDAsyk8">>).
 
-all() -> [add, ls, cat].
+all() -> [add_file, add_data, ls, cat].
 
 init_per_suite(Config) ->
     start_ipfs_container(),
@@ -26,8 +28,9 @@ end_per_suite(Config) ->
     stop_ipfs_container(),
     Config.
 
-add(_Config) ->
+add_file(_Config) ->
     {ok, Pid} = ipfs:start_link(#{ip => "127.0.0.1"}),
+    {error, enoent} = ipfs:add(Pid, <<"/foo/bar">>),
     ok = file:write_file("/tmp/ipfs_test", ?DATA_1MiB),
     {ok, #{
         <<"Hash">> := ?DATA_1MiB_HASH,
@@ -35,6 +38,15 @@ add(_Config) ->
         <<"Size">> := <<"1048832">>
     }} = ipfs:add(Pid, <<"/tmp/ipfs_test">>),
     file:delete("/tmp/ipfs_test"),
+    ipfs:stop(Pid).
+
+add_data(_Config) ->
+    {ok, Pid} = ipfs:start_link(#{ip => "127.0.0.1"}),
+    {ok, #{
+        <<"Hash">> := ?DATA_100MiB_HASH,
+        <<"Name">> := ?DATA_100MiB_HASH,
+        <<"Size">> := <<"104882589">>
+    }} = ipfs:add(Pid, {data, ?DATA_100MiB}, 60000),
     ipfs:stop(Pid).
 
 ls(_Config) ->
