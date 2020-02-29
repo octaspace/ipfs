@@ -2,7 +2,7 @@
 
 ## Methods
 
-[X] ls
-[X] cat
-[X] add
-[ ] get
+* [x] ls
+* [x] cat
+* [x] add
+* [ ] get
