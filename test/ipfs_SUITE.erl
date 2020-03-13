@@ -8,15 +8,14 @@
 -export([add_data/1]).
 -export([ls/1]).
 -export([cat/1]).
+-export([get/1]).
 
 -define(DATA_1MiB, <<0:8388608>>).
 -define(DATA_100MiB, <<0:838860800>>).
--define(DATA_1MiB_MD5, <<182,216,27,54,10,86,114,216,12,39,67,15,57,21,62,44>>).
--define(DATA_100MiB_MD5, <<47,40,43,132,231,230,8,213,133,36,73,237,148,11,252,81>>).
 -define(DATA_1MiB_HASH, <<"QmVkbauSDEaMP4Tkq6Epm9uW75mWm136n81YH8fGtfwdHU">>).
 -define(DATA_100MiB_HASH, <<"Qmca3PNFKuZnYkiVv1FpcV1AfDUm4qCSHoYjPTBqDAsyk8">>).
 
-all() -> [add_file, add_data, ls, cat].
+all() -> [add_file, add_data, ls, cat, get].
 
 init_per_suite(Config) ->
     start_ipfs_container(),
@@ -31,13 +30,13 @@ end_per_suite(Config) ->
 add_file(_Config) ->
     {ok, Pid} = ipfs:start_link(#{ip => "127.0.0.1"}),
     {error, enoent} = ipfs:add(Pid, <<"/foo/bar">>),
-    ok = file:write_file("/tmp/ipfs_test", ?DATA_1MiB),
+    TmpFile = mktemp(),
+    ok = file:write_file(TmpFile, ?DATA_1MiB),
     {ok, #{
         <<"Hash">> := ?DATA_1MiB_HASH,
-        <<"Name">> := <<"ipfs_test">>,
         <<"Size">> := <<"1048832">>
-    }} = ipfs:add(Pid, <<"/tmp/ipfs_test">>),
-    file:delete("/tmp/ipfs_test"),
+    }} = ipfs:add(Pid, TmpFile),
+    file:delete(TmpFile),
     ipfs:stop(Pid).
 
 add_data(_Config) ->
@@ -56,10 +55,14 @@ ls(_Config) ->
 
 cat(_Config) ->
     {ok, Pid} = ipfs:start_link(#{ip => "127.0.0.1"}),
-    ok = file:write_file("/tmp/ipfs_test", <<"hello ipfs">>),
-    {ok, #{<<"Hash">> := Hash}} = ipfs:add(Pid, <<"/tmp/ipfs_test">>),
-    {ok, <<"hello ipfs">>} = ipfs:cat(Pid, Hash),
-    file:delete("/tmp/ipfs_test"),
+    {ok, ?DATA_1MiB} = ipfs:cat(Pid, ?DATA_1MiB_HASH),
+    ipfs:stop(Pid).
+
+get(_Config) ->
+    {ok, Pid} = ipfs:start_link(#{ip => "127.0.0.1"}),
+    TmpFile = mktemp(),
+    ipfs:get(Pid, ?DATA_100MiB_HASH, TmpFile),
+    file:delete(TmpFile),
     ipfs:stop(Pid).
 
 start_ipfs_container() ->
@@ -112,3 +115,6 @@ sh_result(Status, Output, Allowed) ->
         false ->
             erlang:error({sh, Status, Output})
     end.
+
+mktemp() ->
+    filename:join([<<"/tmp">>, integer_to_binary(erlang:system_time())]).

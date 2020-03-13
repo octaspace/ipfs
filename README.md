@@ -5,4 +5,4 @@
 * [x] ls
 * [x] cat
 * [x] add
-* [ ] get
+* [x] get

@@ -11,6 +11,8 @@
 -export([add/3]).
 -export([cat/2]).
 -export([cat/3]).
+-export([get/3]).
+-export([get/4]).
 
 -export([init/1]).
 -export([handle_call/3]).
@@ -37,7 +39,7 @@ ls(Pid, Hash, Timeout) ->
     Args = [
         {<<"arg">>, Hash}
     ],
-    gen_server:call(Pid, {get, <<"/ls">>, Args}, Timeout).
+    gen_server:call(Pid, {get, <<"/ls">>, Args, Timeout}, Timeout).
 
 add(Pid, File) ->
     add(Pid, File, 5000).
@@ -62,15 +64,34 @@ cat(Pid, Hash, Timeout) ->
     Args = [
         {<<"arg">>, Hash}
     ],
-    gen_server:call(Pid, {get, <<"/cat">>, Args}, Timeout).
+    gen_server:call(Pid, {get, <<"/cat">>, Args, Timeout}, Timeout).
+
+get(Pid, Hash, FileName) ->
+    get(Pid, Hash, FileName, 5000).
+
+get(Pid, Hash, FileName, Timeout) ->
+    Args = [
+        {<<"arg">>, Hash}
+    ],
+    gen_server:call(Pid, {get_file, <<"/cat">>, Args, FileName, Timeout}, Timeout).
 
 init(Opts) ->
     {ok, #state{opts = Opts}, {continue, start_gun}}.
 
-handle_call({get, URI, Args}, _From, State) ->
+handle_call({get, URI, Args, Timeout}, _From, State) ->
     StreamRef = gun:get(State#state.gun, format_uri(URI, Args)),
-    Response = wait_response(State#state.gun, StreamRef),
+    Response = wait_response(State#state.gun, StreamRef, Timeout),
     {reply, Response, State};
+
+handle_call({get_file, URI, Args, FileName, Timeout}, _From, State) ->
+    case file:open(FileName, [write, raw, binary]) of
+        {ok, FD} ->
+            StreamRef = gun:get(State#state.gun, format_uri(URI, Args)),
+            wait_response(State#state.gun, StreamRef, fun(Data) -> file:write(FD, Data) end, Timeout),
+            file:close(FD),
+            {reply, ok, State};
+        Error -> {reply, Error, State}
+    end;
 
 handle_call({add_file, URI, Args, File, BaseName, Timeout}, _From, State) ->
     case file:open(File, [read, binary, raw]) of
@@ -146,11 +167,11 @@ terminate(_Reason, State) ->
 format_uri(URI, QS) ->
     <<"/api/v0", URI/binary, "?", (cow_qs:qs(QS))/binary>>.
 
-wait_response(Pid, StreamRef) ->
-    wait_response(Pid, StreamRef, 5000).
-
 wait_response(Pid, StreamRef, Timeout) ->
-    case wait_response(Pid, StreamRef, undefined, undefined, <<>>, Timeout) of
+    wait_response(Pid, StreamRef, <<>>, Timeout).
+
+wait_response(Pid, StreamRef, Acc, Timeout) ->
+    case wait_response(Pid, StreamRef, undefined, undefined, Acc, Timeout) of
         {ok, 200, Data} ->
             {ok, Data};
         {ok, _Status, Data} ->
@@ -165,8 +186,14 @@ wait_response(Pid, StreamRef, InitStatus, CT, Acc, Timeout) ->
             wait_response(Pid, StreamRef, Status, NewCT, Acc, Timeout);
         {response, fin, Status, _Headers} ->
             {ok, Status, Acc};
+        {data, nofin, Data} when is_function(Acc) ->
+            Acc(Data),
+            wait_response(Pid, StreamRef, InitStatus, CT, Acc, Timeout);
         {data, nofin, Data} ->
             wait_response(Pid, StreamRef, InitStatus, CT, <<Acc/binary, Data/binary>>, Timeout);
+        {data, fin, Data} when is_function(Acc) ->
+            Acc(Data),
+            {ok, InitStatus, Acc};
         {data, fin, Data} when CT =:= <<"application/json">> ->
             {ok, InitStatus, jsx:decode(<<Acc/binary, Data/binary>>, [return_maps])};
         {data, fin, Data} ->
