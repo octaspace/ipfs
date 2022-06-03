@@ -141,7 +141,7 @@ handle_cast(_Req, State) -> {noreply, State}.
 
 handle_info({gun_up, _Pid, _Proto}, State) -> {noreply, State};
 
-handle_info({gun_down, _Pid, _Proto, Reason, _KilledStreams, _UnprocessedStreams}, State) ->
+handle_info({gun_down, _Pid, _Proto, Reason, _KilledStreams}, State) ->
     logger:error("connection down, reason: ~p", [Reason]),
     {noreply, State};
 
@@ -195,7 +195,7 @@ wait_response(Pid, StreamRef, InitStatus, CT, Acc, Timeout) ->
             Acc(Data),
             {ok, InitStatus, Acc};
         {data, fin, Data} when CT =:= <<"application/json">> ->
-            {ok, InitStatus, jsx:decode(<<Acc/binary, Data/binary>>, [return_maps])};
+            {ok, InitStatus, jsx:decode(<<Acc/binary, Data/binary>>)};
         {data, fin, Data} ->
             {ok, InitStatus, <<Acc/binary, Data/binary>>};
         Error -> Error
